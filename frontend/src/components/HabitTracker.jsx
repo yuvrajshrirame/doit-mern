@@ -162,7 +162,7 @@ export default function HabitTracker() {
                   {user?.isAnonymous && (
                     <button onClick={() => { setIsAuthModalOpen(true); setIsUserMenuOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-black/5 dark:hover:bg-white/10 flex items-center gap-3 font-medium transition-colors rounded-xl"><User size={15} /> Link Account</button>
                   )}
-                  <a href="https://docs.uraj.dev/doit" target="_blank" rel="noreferrer" className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-black/5 dark:hover:bg-white/10 flex items-center gap-3 font-medium transition-colors rounded-xl"><BookOpen size={15} /> Documentation</a>
+                  <a href="https://docs.uraj.dev/doit-mern" target="_blank" rel="noreferrer" className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-black/5 dark:hover:bg-white/10 flex items-center gap-3 font-medium transition-colors rounded-xl"><BookOpen size={15} /> Documentation</a>
                   <button onClick={() => { handleSignOut(); setIsUserMenuOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 flex items-center gap-3 font-medium transition-colors rounded-xl"><LogOut size={15} /> {user?.isAnonymous ? 'Leave Guest Mode' : 'Sign Out'}</button>
                 </div>
               </motion.div>

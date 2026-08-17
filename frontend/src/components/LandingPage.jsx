@@ -30,7 +30,7 @@ const LandingPage = ({ onGuestLogin, onAuthOpen }) => {
         
         <div className="flex items-center gap-5">
           <a 
-            href="https://docs.uraj.dev/doit"
+            href="https://docs.uraj.dev/doit-mern"
             target="_blank"
             rel="noreferrer"
             className="text-xs sm:text-sm font-semibold tracking-wide text-foreground/60 hover:text-foreground transition-colors"
@@ -297,10 +297,10 @@ const LandingPage = ({ onGuestLogin, onAuthOpen }) => {
           <span>© 2026 doit. All rights reserved.</span>
         </div>
         <div className="flex gap-6">
-          <a href="https://github.com/yuvrajshrirame/do-it" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">Privacy Policy</a>
-          <a href="https://github.com/yuvrajshrirame/do-it" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">Terms of Service</a>
-          <a href="https://docs.uraj.dev/doit" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors font-medium">Documentation</a>
-          <a href="https://github.com/yuvrajshrirame/do-it" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">GitHub</a>
+          <a href="https://github.com/yuvrajshrirame/doit-mern" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">Privacy Policy</a>
+          <a href="https://github.com/yuvrajshrirame/doit-mern" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">Terms of Service</a>
+          <a href="https://docs.uraj.dev/doit-mern" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors font-medium">Documentation</a>
+          <a href="https://github.com/yuvrajshrirame/doit-mern" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">GitHub</a>
         </div>
       </footer>
     </div>
