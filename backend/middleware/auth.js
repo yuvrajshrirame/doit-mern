@@ -8,7 +8,7 @@ const authMiddleware = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
+    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET || 'access_fallback_secret');
     req.user = decoded.user;
     next();
   } catch (err) {

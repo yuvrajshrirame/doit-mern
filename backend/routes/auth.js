@@ -9,27 +9,64 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const router = express.Router();
 
-// Generate JWT Helper
-const generateToken = (user) => {
-  return jwt.sign(
+// ── Token helpers ─────────────────────────────────────────────────────────────
+
+const generateAccessToken = (user) =>
+  jwt.sign(
     { user: { id: user._id, isAnonymous: user.isAnonymous } },
-    process.env.JWT_SECRET || 'fallback_secret',
-    { expiresIn: '30d' }
+    process.env.ACCESS_TOKEN_SECRET || 'access_fallback_secret',
+    { expiresIn: '15m' }
   );
+
+const generateRefreshToken = (user) =>
+  jwt.sign(
+    { user: { id: user._id, isAnonymous: user.isAnonymous } },
+    process.env.REFRESH_TOKEN_SECRET || 'refresh_fallback_secret',
+    { expiresIn: '7d' }
+  );
+
+const REFRESH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
+  path: '/',
 };
+
+/**
+ * Issue both tokens, persist the refresh token on the user document,
+ * set it as an httpOnly cookie, and return the access token + public user data.
+ */
+const issueTokens = async (user, res) => {
+  const accessToken = generateAccessToken(user);
+  const refreshToken = generateRefreshToken(user);
+
+  user.refreshToken = refreshToken;
+  await user.save();
+
+  res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTIONS);
+
+  return {
+    token: accessToken,
+    user: {
+      id: user._id,
+      email: user.email,
+      displayName: user.displayName,
+      isAnonymous: user.isAnonymous,
+    },
+  };
+};
+
+// ── Routes ────────────────────────────────────────────────────────────────────
 
 // @route   POST /api/auth/anonymous
 // @desc    Sign in anonymously
 router.post('/anonymous', async (req, res) => {
   try {
-    let user = new User({
-      isAnonymous: true,
-      displayName: 'Guest User'
-    });
+    const user = new User({ isAnonymous: true, displayName: 'Guest User' });
     await user.save();
-
-    const token = generateToken(user);
-    res.json({ token, user: { id: user._id, displayName: user.displayName, isAnonymous: true } });
+    const payload = await issueTokens(user, res);
+    res.json(payload);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: err.message, stack: err.stack });
@@ -49,14 +86,12 @@ router.post('/register', async (req, res) => {
 
     user = new User({ email, password, displayName, isAnonymous: false });
 
-    // Hash password
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(password, salt);
 
-    await user.save();
-
-    const token = generateToken(user);
-    res.json({ token, user: { id: user._id, email: user.email, displayName: user.displayName, isAnonymous: false } });
+    // issueTokens saves the user with refreshToken set
+    const payload = await issueTokens(user, res);
+    res.json(payload);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: err.message, stack: err.stack });
@@ -69,7 +104,7 @@ router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    let user = await User.findOne({ email });
+    const user = await User.findOne({ email });
     if (!user) {
       return res.status(400).json({ message: 'Invalid Credentials' });
     }
@@ -79,8 +114,8 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid Credentials' });
     }
 
-    const token = generateToken(user);
-    res.json({ token, user: { id: user._id, email: user.email, displayName: user.displayName, isAnonymous: false } });
+    const payload = await issueTokens(user, res);
+    res.json(payload);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: err.message, stack: err.stack });
@@ -97,24 +132,16 @@ router.post('/google', async (req, res) => {
       idToken: credential,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
-    
-    const payload = ticket.getPayload();
-    const { email, name, picture } = payload;
+
+    const { email, name } = ticket.getPayload();
 
     let user = await User.findOne({ email });
-    
     if (!user) {
-      // Create new user if they don't exist
-      user = new User({ 
-        email, 
-        displayName: name, 
-        isAnonymous: false,
-      });
-      await user.save();
+      user = new User({ email, displayName: name, isAnonymous: false });
     }
 
-    const token = generateToken(user);
-    res.json({ token, user: { id: user._id, email: user.email, displayName: user.displayName, isAnonymous: false } });
+    const payload = await issueTokens(user, res);
+    res.json(payload);
   } catch (err) {
     console.error('Google Auth Error:', err);
     res.status(500).json({ message: 'Google authentication failed', details: err.message });
@@ -127,42 +154,98 @@ router.post('/link', auth, async (req, res) => {
   const { email, password, displayName } = req.body;
 
   try {
-    // Check if email already in use
-    let existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: 'Email already linked to another account' });
     }
 
-    // Find the current anonymous user
-    let user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.id);
     if (!user || !user.isAnonymous) {
       return res.status(400).json({ message: 'User is not anonymous or not found' });
     }
 
-    // Upgrade the user
     user.email = email;
     user.displayName = displayName || user.displayName;
     user.isAnonymous = false;
 
-    // Hash new password
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(password, salt);
 
-    await user.save();
-
-    const token = generateToken(user);
-    res.json({ token, user: { id: user._id, email: user.email, displayName: user.displayName, isAnonymous: false } });
+    const payload = await issueTokens(user, res);
+    res.json(payload);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: err.message, stack: err.stack });
   }
 });
 
+// @route   POST /api/auth/refresh
+// @desc    Issue a new access token using the httpOnly refresh token cookie
+router.post('/refresh', async (req, res) => {
+  const token = req.cookies?.refreshToken;
+
+  if (!token) {
+    return res.status(401).json({ message: 'No refresh token' });
+  }
+
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.REFRESH_TOKEN_SECRET || 'refresh_fallback_secret'
+    );
+
+    const user = await User.findById(decoded.user.id);
+
+    if (!user || user.refreshToken !== token) {
+      return res.status(403).json({ message: 'Refresh token invalid or reused' });
+    }
+
+    // Rotate the refresh token on every use
+    const newAccessToken = generateAccessToken(user);
+    const newRefreshToken = generateRefreshToken(user);
+
+    user.refreshToken = newRefreshToken;
+    await user.save();
+
+    res.cookie('refreshToken', newRefreshToken, REFRESH_COOKIE_OPTIONS);
+
+    res.json({ token: newAccessToken });
+  } catch (err) {
+    console.error('Refresh error:', err);
+    res.status(403).json({ message: 'Refresh token expired or invalid' });
+  }
+});
+
+// @route   POST /api/auth/logout
+// @desc    Clear the refresh token cookie and invalidate the stored token
+router.post('/logout', async (req, res) => {
+  const token = req.cookies?.refreshToken;
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(
+        token,
+        process.env.REFRESH_TOKEN_SECRET || 'refresh_fallback_secret'
+      );
+      const user = await User.findById(decoded.user.id);
+      if (user) {
+        user.refreshToken = null;
+        await user.save();
+      }
+    } catch (_) {
+      // Token already expired — still clear the cookie
+    }
+  }
+
+  res.clearCookie('refreshToken', { ...REFRESH_COOKIE_OPTIONS, maxAge: 0 });
+  res.json({ message: 'Logged out' });
+});
+
 // @route   GET /api/auth/me
 // @desc    Get user data
 router.get('/me', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    const user = await User.findById(req.user.id).select('-password -refreshToken');
     res.json(user);
   } catch (err) {
     console.error(err);
@@ -175,13 +258,18 @@ router.get('/me', auth, async (req, res) => {
 router.put('/profile', auth, async (req, res) => {
   const { displayName } = req.body;
   try {
-    let user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     user.displayName = displayName;
     await user.save();
 
-    res.json({ id: user._id, email: user.email, displayName: user.displayName, isAnonymous: user.isAnonymous });
+    res.json({
+      id: user._id,
+      email: user.email,
+      displayName: user.displayName,
+      isAnonymous: user.isAnonymous,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: err.message, stack: err.stack });
