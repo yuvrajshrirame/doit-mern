@@ -17,6 +17,7 @@ export const AuthProvider = ({ children }) => {
           const res = await api.get('/auth/me');
           setUser(res.data);
         } catch (err) {
+          // Token was invalid or refresh failed — clean up.
           console.error(err);
           localStorage.removeItem('token');
         }
@@ -26,11 +27,16 @@ export const AuthProvider = ({ children }) => {
     loadUser();
   }, []);
 
+  // Persist access token and update user state from a login/register response.
+  const handleAuthResponse = (data) => {
+    localStorage.setItem('token', data.token);
+    setUser(data.user);
+  };
+
   const signInAnonymously = async () => {
     try {
       const res = await api.post('/auth/anonymous');
-      localStorage.setItem('token', res.data.token);
-      setUser(res.data.user);
+      handleAuthResponse(res.data);
     } catch (err) {
       throw err.response?.data?.message || 'Anonymous login failed';
     }
@@ -39,8 +45,7 @@ export const AuthProvider = ({ children }) => {
   const register = async (email, password, displayName) => {
     try {
       const res = await api.post('/auth/register', { email, password, displayName });
-      localStorage.setItem('token', res.data.token);
-      setUser(res.data.user);
+      handleAuthResponse(res.data);
     } catch (err) {
       throw err.response?.data?.message || 'Registration failed';
     }
@@ -49,8 +54,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       const res = await api.post('/auth/login', { email, password });
-      localStorage.setItem('token', res.data.token);
-      setUser(res.data.user);
+      handleAuthResponse(res.data);
     } catch (err) {
       throw err.response?.data?.message || 'Login failed';
     }
@@ -59,8 +63,7 @@ export const AuthProvider = ({ children }) => {
   const loginWithGoogle = async (credential) => {
     try {
       const res = await api.post('/auth/google', { credential });
-      localStorage.setItem('token', res.data.token);
-      setUser(res.data.user);
+      handleAuthResponse(res.data);
     } catch (err) {
       throw err.response?.data?.message || 'Google Login failed';
     }
@@ -69,8 +72,7 @@ export const AuthProvider = ({ children }) => {
   const linkAccount = async (email, password, displayName) => {
     try {
       const res = await api.post('/auth/link', { email, password, displayName });
-      localStorage.setItem('token', res.data.token);
-      setUser(res.data.user);
+      handleAuthResponse(res.data);
     } catch (err) {
       throw err.response?.data?.message || 'Account linking failed';
     }
@@ -85,9 +87,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
+  const logout = async () => {
+    try {
+      // Tell the server to clear the httpOnly refresh token cookie.
+      await api.post('/auth/logout');
+    } catch (err) {
+      // Proceed with client-side cleanup regardless of server errors.
+      console.error('Logout request failed:', err);
+    } finally {
+      localStorage.removeItem('token');
+      setUser(null);
+    }
   };
 
   return (
@@ -100,7 +110,7 @@ export const AuthProvider = ({ children }) => {
       loginWithGoogle,
       linkAccount,
       updateProfile,
-      logout
+      logout,
     }}>
       {!loading && children}
     </AuthContext.Provider>
