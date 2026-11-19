@@ -25,10 +25,12 @@ const generateRefreshToken = (user) =>
     { expiresIn: '7d' }
   );
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict',
+  secure: isProduction,          // must be true for sameSite:'none' to work
+  sameSite: isProduction ? 'none' : 'lax', // 'none' required for cross-origin (Vercel ↔ Render)
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
   path: '/',
 };
